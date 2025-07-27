@@ -48,8 +48,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         // Call the Authenticate method - you can set a breakpoint here
-        //var result = await ottoApiClient.GetOrdersAsync(DateTime.Now.AddDays(-50), DateTime.Now); // Using accountId = 1 for testing
-        var odooResult = await odooApiClient.GetProductVariationQuantities();
+        var result = await ottoApiClient.GetOrdersAsync(DateTime.Now.AddDays(-1), DateTime.Now); // Using accountId = 1 for testing
+        //var odooResult = await odooApiClient.GetProductVariationQuantities();
         
         //if (result.IsSuccess)
         //{
