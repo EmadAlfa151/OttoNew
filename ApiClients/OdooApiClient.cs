@@ -1,5 +1,7 @@
-﻿using CoreSystem.Shared.DTOs;
+﻿using CoreSystem.DAL.Context;
+using CoreSystem.Shared.DTOs;
 using OttoNew.OdooSpecificDtos;
+using OttoNew.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -13,46 +15,26 @@ namespace OttoNew.ApiClients
 	public class OdooApiClient
 	{
 		private readonly HttpClient _httpClient;
-		private readonly string _url;
-		private readonly string _db;
-		private readonly string _username;
-		private readonly string _password;
+		private readonly OdooAccountService odooAccountService;
+		private string _url;
+		private string _db;
+		private string _username;
+		private string _password;
 		private int _requestId = 1;
 		private int? _uid;
 
-		public OdooApiClient(HttpClient httpClient, string url, string db, string username, string password)
+		public OdooApiClient(HttpClient httpClient, OdooAccountService odooAccountService)
 		{
 			_httpClient = httpClient;
-			_url = url.EndsWith("/jsonrpc") ? url : url.TrimEnd('/') + "/jsonrpc";
-			_db = db;
-			_username = username;
-			_password = password;
+			this.odooAccountService = odooAccountService;
+			
 		}
 
-		private async Task<int> Authenticate()
-		{
-			if (_uid.HasValue) return _uid.Value;
-
-			var payload = new
-			{
-				jsonrpc = "2.0",
-				method = "call",
-				@params = new
-				{
-					service = "common",
-					method = "login",
-					args = new object[] { _db, _username, _password }
-				},
-				id = _requestId++
-			};
-
-			var response = await SendJsonRpcAsync(payload);
-			_uid = response.GetProperty("result").GetInt32();
-			return _uid.Value;
-		}
+		
 
 		public async Task<List<OdooCategoryDto>> GetProductCategoriesAsync()
 		{
+			await SetAccountValues();
 			var payload = new
 			{
 				jsonrpc = "2.0",
@@ -81,6 +63,7 @@ namespace OttoNew.ApiClients
 
 		public async Task<List<OdooProductDto>> GetProductsAsync()
 		{
+			await SetAccountValues();
 			try
 			{
 				var payload = new
@@ -149,32 +132,9 @@ namespace OttoNew.ApiClients
 			}
 		}
 
-		private async Task<JsonElement> SendJsonRpcAsync(object payload)
-		{
-			var jsonRequest = JsonSerializer.Serialize(payload);
-			Debug.WriteLine("ODoo JSON-RPC Request: " + jsonRequest);
-
-			var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-			var response = await _httpClient.PostAsync(_url, content);
-			var jsonResponse = await response.Content.ReadAsStringAsync();
-
-			Debug.WriteLine("Odoo JSON-RPC Response: " + jsonResponse);
-
-			var doc = JsonDocument.Parse(jsonResponse);
-			var root = doc.RootElement;
-
-			if (root.TryGetProperty("error", out var error))
-			{
-				var msg = error.TryGetProperty("message", out var m) ? m.GetString() : "Unknown Odoo error";
-				throw new Exception($"Odoo JSON-RPC Error: {msg}");
-			}
-
-			return root;
-		}
-
-
 		public async Task<int> TestLoginAsync()
 		{
+			await SetAccountValues();
 			var payload = new
 			{
 				jsonrpc = "2.0",
@@ -194,6 +154,7 @@ namespace OttoNew.ApiClients
 
 		public async Task<(bool success, string errorMessage)> CreateProductInOdoo(ProductDto product, int? odooCategoryId)
 		{
+			await SetAccountValues();
 			try
 			{
 				string categoryName = product.ProductDescription?.Category ?? "Uncategorized";
@@ -268,6 +229,7 @@ namespace OttoNew.ApiClients
 
 		public async Task<int> GetCategoryIdByName(string categoryName)
 		{
+			await SetAccountValues();
 			// Ensure categoryName isn’t empty
 			if (string.IsNullOrWhiteSpace(categoryName))
 				categoryName = "Uncategorized";
@@ -341,6 +303,7 @@ namespace OttoNew.ApiClients
 
 		public async Task<bool> ProductExists(string sku = "", string barcode = "")
 		{
+			await SetAccountValues();
 			try
 			{
 				var payload = new
@@ -385,6 +348,7 @@ namespace OttoNew.ApiClients
 		}
 		public async Task<bool> ProductExistsByBarcode(string barcode)
 		{
+			await SetAccountValues();
 			try
 			{
 				var payload = new
@@ -527,6 +491,7 @@ namespace OttoNew.ApiClients
 		// Function to get Odoo Product ID by SKU
 		public async Task<(bool success, string errorMessage)> CreateOrderInOdoo(OdooOrder odooOrder)
 		{
+			await SetAccountValues();
 			try
 			{
 				var taxes = await GetTaxesAsync();
@@ -663,6 +628,7 @@ namespace OttoNew.ApiClients
 
 		public async Task<int> GetOdooProductIdBySku(string sku)
 		{
+			await SetAccountValues();
 			try
 			{
 				var payload = new
@@ -720,6 +686,7 @@ namespace OttoNew.ApiClients
 		}
 		public async Task<int> GetOdooProductIdByBarcode(string barcode)
 		{
+			await SetAccountValues();
 			try
 			{
 				var payload = new
@@ -778,6 +745,7 @@ namespace OttoNew.ApiClients
 
 		public async Task<List<ProductVariationQuantityDto>> GetProductVariationQuantities()
 		{
+			await SetAccountValues();
 			try
 			{
 				var payload = new
@@ -832,6 +800,7 @@ namespace OttoNew.ApiClients
 
 		public async Task<List<OdooOrder>> GetOrdersReadyForShipmentAsync()
 		{
+			await SetAccountValues();
 			try
 			{
 				var payload = new
@@ -900,6 +869,7 @@ namespace OttoNew.ApiClients
 
 		public async Task<List<OdooTaxDto>> GetTaxesAsync()
 		{
+			await SetAccountValues();
 			try
 			{
 				var payload = new
@@ -950,6 +920,66 @@ namespace OttoNew.ApiClients
 				Debug.WriteLine($"Error in GetTaxesAsync: {ex.Message}");
 				throw;
 			}
+		}
+
+
+
+		private async Task SetAccountValues()
+		{
+			var accountResult = await odooAccountService.GetFirstAccount();
+			if (accountResult.IsSuccess)
+			{
+				var account = accountResult.Data;
+				_url = account.Url.EndsWith("/jsonrpc") ? account.Url : account.Url.TrimEnd('/') + "/jsonrpc";
+				_db = account.DbName;
+				_username = account.Email;
+				_password = account.PassAccount;
+			}
+		}
+		private async Task<int> Authenticate()
+		{
+			await SetAccountValues();
+			if (_uid.HasValue) return _uid.Value;
+
+			var payload = new
+			{
+				jsonrpc = "2.0",
+				method = "call",
+				@params = new
+				{
+					service = "common",
+					method = "login",
+					args = new object[] { _db, _username, _password }
+				},
+				id = _requestId++
+			};
+
+			var response = await SendJsonRpcAsync(payload);
+			_uid = response.GetProperty("result").GetInt32();
+			return _uid.Value;
+		}
+		private async Task<JsonElement> SendJsonRpcAsync(object payload)
+		{
+			await SetAccountValues();
+			var jsonRequest = JsonSerializer.Serialize(payload);
+			Debug.WriteLine("ODoo JSON-RPC Request: " + jsonRequest);
+
+			var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+			var response = await _httpClient.PostAsync(_url, content);
+			var jsonResponse = await response.Content.ReadAsStringAsync();
+
+			Debug.WriteLine("Odoo JSON-RPC Response: " + jsonResponse);
+
+			var doc = JsonDocument.Parse(jsonResponse);
+			var root = doc.RootElement;
+
+			if (root.TryGetProperty("error", out var error))
+			{
+				var msg = error.TryGetProperty("message", out var m) ? m.GetString() : "Unknown Odoo error";
+				throw new Exception($"Odoo JSON-RPC Error: {msg}");
+			}
+
+			return root;
 		}
 
 	}

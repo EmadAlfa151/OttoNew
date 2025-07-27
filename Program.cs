@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OttoNew.ApiClients;
+using OttoNew.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -27,6 +28,8 @@ builder.Services.AddHttpClient<OttoApiClient>(client =>
 	client.BaseAddress = new Uri(baseUrl);
 	client.Timeout = TimeSpan.FromSeconds(30);
 });
+builder.Services.AddScoped<OdooAccountService>();
+builder.Services.AddScoped<OdooApiClient>();
 
 
 var app = builder.Build();
@@ -38,22 +41,24 @@ Console.WriteLine("Otto Marketplace Integration Started");
 using (var scope = app.Services.CreateScope())
 {
     var ottoApiClient = scope.ServiceProvider.GetRequiredService<OttoApiClient>();
+    var odooApiClient = scope.ServiceProvider.GetRequiredService<OdooApiClient>();
     
-    Console.WriteLine("Testing Otto GetOrdersAsync...");
+    Console.WriteLine("Testing Odoo ...");
     
     try
     {
         // Call the Authenticate method - you can set a breakpoint here
-        var result = await ottoApiClient.GetOrdersAsync(DateTime.Now.AddDays(-50), DateTime.Now); // Using accountId = 1 for testing
+        //var result = await ottoApiClient.GetOrdersAsync(DateTime.Now.AddDays(-50), DateTime.Now); // Using accountId = 1 for testing
+        var odooResult = await odooApiClient.GetProductVariationQuantities();
         
-        if (result.IsSuccess)
-        {
-            Console.WriteLine("result test successful!");
-        }
-        else
-        {
-            Console.WriteLine($"result test failed: {result.ErrorMessage}");
-        }
+        //if (result.IsSuccess)
+        //{
+        //    Console.WriteLine("result test successful!");
+        //}
+        //else
+        //{
+        //    Console.WriteLine($"result test failed: {result.ErrorMessage}");
+        //}
     }
     catch (Exception ex)
     {
