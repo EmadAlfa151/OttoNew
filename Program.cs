@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OttoNew.ApiClients;
+using OttoNew.Mappers;
 using OttoNew.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -48,9 +49,13 @@ using (var scope = app.Services.CreateScope())
     try
     {
         // Call the Authenticate method - you can set a breakpoint here
-        var result = await ottoApiClient.GetOrdersAsync(DateTime.Now.AddDays(-1), DateTime.Now); // Using accountId = 1 for testing
-        //var odooResult = await odooApiClient.GetProductVariationQuantities();
-        
+        //var result = await ottoApiClient.GetOrdersAsync(DateTime.Now.AddDays(-1), DateTime.Now); // Using accountId = 1 for testing
+        //var mappedOrders = DbModelMapper.MapToOrderDtoList(result.Data);
+        //var odooQuantitiesResult = await odooApiClient.GetProductVariationQuantities();
+        var odooResult = await odooApiClient.GetTaxesAsync();
+
+        //var result = await ottoApiClient.GetProductVariations();
+        //var mappedProducts = DbModelMapper.MapToProductDto(result.Data);
         //if (result.IsSuccess)
         //{
         //    Console.WriteLine("result test successful!");

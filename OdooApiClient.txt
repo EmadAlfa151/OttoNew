@@ -1,0 +1,309 @@
+        public async Task<int> PushTemplateToOdooAsync(ProductDTO tpl)
+        {
+            /* 0. LOGIN -------------------------------------------------------- */
+            if (!await _odoo.AuthenticateAsync())
+                throw new InvalidOperationException("Odoo auth failed");
+
+            /* 1. product.template ---------------------------------------------- */
+            int tmplId = await _odoo.GetOrCreateIdAsync(
+                "product.template",
+                _odoo.Dom(("name", "=", tpl.Name)),
+                new
+                {
+                    name = tpl.Name,
+                    default_code = tpl.Sku,
+                    categ_id = 1,   // single int
+                    type = "product",
+                    detailed_type = "product",
+                    sale_ok = true,
+                    purchase_ok = true,
+                    tracking = "none",
+                    list_price = tpl.NetPrice,
+                    qty_available = tpl.Quantity,
+                    standard_price = tpl.NetPrice, // cost price
+
+                    /* Units of measure (1 = “Units” in demo data) */
+                    uom_id = 1,
+                    uom_po_id = 1,
+
+                    /* warn the user on sale / purchase lines */
+                    sale_line_warn = "warning",
+                    sale_line_warn_msg = "Check stock before sale",
+                    purchase_line_warn = "warning",
+                    purchase_line_warn_msg = "Request quality certificate",
+
+                    /* DO NOT send product_variant_ids here */
+                });
+
+            /* 2. collect attributes/values ------------------------------------- */
+            var attrValueIds = new Dictionary<string, List<int>>();
+
+            foreach (var v in tpl.Variants)
+            {
+                foreach (KeyValuePair<string, string> kv in v.Attributes)   // 👈 no deconstruct
+                {
+                    string attr = kv.Key;
+                    string val = kv.Value;
+
+                    int attrId = await _odoo.GetOrCreateIdAsync(
+                        "product.attribute",
+                        _odoo.Dom(("name", "=", attr)),
+                        new { name = attr });
+
+                    int valId = await _odoo.GetOrCreateIdAsync(
+                        "product.attribute.value",
+                        _odoo.Dom(("name", "=", val), ("attribute_id", "=", attrId)),
+                        new { name = val, attribute_id = attrId });
+
+                    if (!attrValueIds.TryGetValue(attr, out var list))
+                        attrValueIds[attr] = list = new();
+                    if (!list.Contains(valId)) list.Add(valId);
+                }
+            }
+
+            /* 3. attribute lines on template ----------------------------------- */
+            foreach (var (attr, valIds) in attrValueIds)
+            {
+                int attrId = await _odoo.GetOrCreateIdAsync("product.attribute",
+                                                            _odoo.Dom(("name", "=", attr)),
+                                                            new { name = attr });
+
+                //bool exists = await _odoo.ExistsAsync(
+                //    "product.template.attribute.line",
+                //    _odoo.Dom(("product_tmpl_id", "=", tmplId), ("attribute_id", "=", attrId)));
+
+                //if (!exists)
+                //{
+                //    await _odoo.CreateRecordAsync("product.template.attribute.line", new
+                //    {
+                //        product_tmpl_id = tmplId,
+                //        attribute_id = attrId,
+                //        value_ids = new object[]
+                //        {
+                //            new object[] { 6, 0, valIds.ToArray() }
+                //        }
+                //    });
+                //}
+
+                int lineId = await _odoo.GetOrCreateIdAsync(
+                    "product.template.attribute.line",
+                    _odoo.Dom(("product_tmpl_id", "=", tmplId), ("attribute_id", "=", attrId)),
+                    new
+                    {
+                        product_tmpl_id = tmplId,
+                        attribute_id = attrId,
+                        value_ids = new object[] { new object[] { 6, 0, valIds.ToArray() } }
+                    });
+
+                foreach (int valId in valIds)
+                {
+                    decimal extra = LookupPriceExtra(attr, valId, tpl); // your own rule
+
+                    int ptavId = await _odoo.GetOrCreateIdAsync(
+                        "product.template.attribute.value",
+                        _odoo.Dom(("attribute_line_id", "=", lineId),
+                                  ("product_attribute_value_id", "=", valId)),
+                        new
+                        {
+                            attribute_line_id = lineId,
+                            product_tmpl_id = tmplId,
+                            product_attribute_value_id = valId,
+                            price_extra = extra
+                        });
+
+                    await _odoo.UpdateRecordAsync("product.template.attribute.value",
+                                                  ptavId,
+                                                  new { price_extra = extra });
+                }
+            }
+            var category = await _categories.GetByIdAsync(tpl.CategoryId ?? 0);
+            var odooCategoryId = category?.OdooId > 0 ? category.OdooId : 1;
+            /* 4. create / update variants -------------------------------------- */
+            foreach (var v in tpl.Variants)
+            {
+                var valueIds = new List<int>();
+                foreach (KeyValuePair<string, string> kv in v.Attributes)
+                {
+                    int valId = await _odoo.GetIdAsync("product.attribute.value",
+                                                       _odoo.Dom(("name", "=", kv.Value)));
+                    valueIds.Add(valId);
+                }
+
+                if (valueIds == null || valueIds.Count == 0)
+                    throw new Exception("No attribute values provided");
+
+                //int prodId = await _odoo.GetOrCreateIdAsync(
+                //    "product.product",
+                //    _odoo.Dom(("product_tmpl_id", "=", tmplId),
+                //              ("default_code", "=", v.Sku)),
+                //    new
+                //    {
+                //        product_tmpl_id = tmplId,
+                //        default_code = v.Sku,
+                //        barcode = v.Barcode,
+                //        list_price = v.NetPrice,
+                //        categ_id = odooCategoryId,
+                //        detailed_type = "product",
+                //        name = tpl.Name,
+                //        //attribute_value_ids = new object[]
+                //        //{
+                //        //    new object[] { 6, 0, valueIds.ToArray() }
+                //        //}
+                //    });
+
+                //var result = await _odoo.CallMethodAsync(
+                //    "product.product",
+                //    "search_read",
+                //    new object[]
+                //    {
+                //        new object[]        // domain
+                //        {
+                //            new object[] { "product_tmpl_id", "=", tmplId },
+                //        }
+                //    },
+                //    new
+                //    {
+                //        fields = new[] { "id" },
+                //        limit = 1
+                //    });
+
+
+
+
+                //var result = await _odoo.CallMethodAsync(
+                //    "product.product",
+                //    "search_read",
+                //    new object[]
+                //    {
+                //        new object[]   // domain
+                //        {
+                //            new object[] { "product_tmpl_id", "=", tmplId }
+                //        }
+                //    },
+                //    new
+                //    {
+                //        fields = new[] { "id", "default_code", "barcode" }  // anything you need
+                //        // NO limit  → get them all
+                //        // order = "id"       // (optional) sort by id
+                //    });
+
+
+
+
+                // `search_read` returns a list of dicts; grab id if any
+                //int prodId = 0;
+                //if (result is JsonElement elem && elem.ValueKind == JsonValueKind.Array &&
+                //    elem.GetArrayLength() > 0)
+                //{
+                //    prodId = elem[0].GetProperty("id").GetInt32();
+                //}
+
+
+                //var productIds = new List<int>();
+
+                //if (result is JsonElement elem && elem.ValueKind == JsonValueKind.Array)
+                //{
+                //    foreach (var rec in elem.EnumerateArray())
+                //    {
+                //        if (rec.TryGetProperty("id", out var idProp) &&
+                //            idProp.ValueKind == JsonValueKind.Number)
+                //        {
+                //            productIds.Add(idProp.GetInt32());
+                //        }
+                //    }
+                //}
+
+                //foreach (int prodId in productIds)
+                //{
+                //    if (prodId > 0)
+                //    {
+
+                //        var odooFields = new
+                //        {
+                //            name = tpl.Name,
+                //            default_code = v.Sku,
+                //            barcode = v.Barcode,
+                //            list_price = v.NetPrice,
+                //            categ_id = 1,
+                //            qty_available = v.Quantity
+                //        };
+                //        await _odoo.UpdateRecordAsync("product.product", prodId, odooFields);
+                //    }
+
+
+                //    await AdjustQuantityUsingWizardAsync(prodId, tmplId, v.Quantity);
+            }
+
+            //        var result = await _odoo.CallMethodAsync(
+            //            "product.product",
+            //            "search_read",
+            //new object[]         // ← positional‑args array
+            //{
+            //    new object[]     // ← domain array (required)
+            //    {
+            //        new object[] { "product_tmpl_id", "=", tmplId },
+            //        new object[] { "active", "in", new object[] { true, false } }
+            //    }
+            //    // (optional) you could add more positional args here: fields, offset, limit, order
+            //});
+            // 1️⃣  Read every variant under template with the fields we need
+            var result = await _odoo.CallMethodAsync(
+                "product.product",
+                "search_read",
+                new object[]                      // positional args array
+                {
+                    new object[]                  // 1️⃣  domain
+                    {
+                        new object[] { "product_tmpl_id", "=", tmplId },
+                        new object[] { "active", "in", new object[] { true, false } }
+                    },
+                    new[]                         // 2️⃣  list of fields to read
+                    {
+                        "id", "default_code", "barcode", "product_template_variant_value_ids"
+                    }
+
+                });
+
+
+            var productIds = new List<int>();
+            if (result is JsonElement elem && elem.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var rec in elem.EnumerateArray())
+                {
+                    if (rec.TryGetProperty("id", out var idProp) &&
+                        idProp.ValueKind == JsonValueKind.Number)
+                    {
+                        productIds.Add(idProp.GetInt32());
+                    }
+                }
+            }
+
+            var variants = tpl.Variants.ToList();
+            var productsIds = productIds;
+
+            int count = Math.Min(variants.Count, productsIds.Count);
+
+            for (int i = 0; i < count; i++)
+            {
+                var v = variants[i];
+                int prodId = productsIds[i];
+
+                var odooFields = new
+                {
+                    name = tpl.Name,
+                    default_code = v.Sku,
+                    barcode = v.Barcode,
+                    list_price = v.NetPrice,
+                    categ_id = 1,
+                    qty_available = v.Quantity
+                };
+
+                await _odoo.UpdateRecordAsync("product.product", prodId, odooFields);
+                await AdjustQuantityUsingWizardAsync(prodId, tmplId, v.Quantity);
+            }
+
+
+
+
+            return tmplId;
+        }

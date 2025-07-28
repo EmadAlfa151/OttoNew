@@ -19,35 +19,35 @@ namespace OttoNew.Services
 			_context = context;
 		}
 
-		public async Task<Result<TOdooAccount>> GetFirstAccount()
+		public async Task<Result<tOdooAccount>> GetFirstAccount()
 		{
-			var account = await _context.TOdooAccounts.FirstOrDefaultAsync();
+			var account = await _context.tOdooAccounts.FirstOrDefaultAsync();
 			if (account is null)
 			{
-				return Result<TOdooAccount>.Failure("No Odoo Accounts found!");
+				return Result<tOdooAccount>.Failure("No Odoo Accounts found!");
 			}
-			return Result<TOdooAccount>.Success(account);
+			return Result<tOdooAccount>.Success(account);
 		}
-		public Task<List<TOdooAccount>> LoadAllAccountAsync()
+		public Task<List<tOdooAccount>> LoadAllAccountAsync()
 		{
-			return Task.Run(() => _context.TOdooAccounts.ToList());
+			return Task.Run(() => _context.tOdooAccounts.ToList());
 		}
 
-		public async Task<bool> DeleteAsync(TOdooAccount account)
+		public async Task<bool> DeleteAsync(tOdooAccount account)
 		{
-			var entry = await _context.TOdooAccounts.FindAsync(account.Id);
+			var entry = await _context.tOdooAccounts.FindAsync(account.Id);
 			if (entry != null)
 			{
-				_context.TOdooAccounts.Remove(entry);
+				_context.tOdooAccounts.Remove(entry);
 				await _context.SaveChangesAsync();
 				return true;
 			}
 			return false;
 		}
 
-		public async Task<bool> AddAsync(TOdooAccount account)
+		public async Task<bool> AddAsync(tOdooAccount account)
 		{
-			_context.TOdooAccounts.Add(account);
+			_context.tOdooAccounts.Add(account);
 			await _context.SaveChangesAsync();
 			return true;
 		}

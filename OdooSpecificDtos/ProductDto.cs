@@ -29,7 +29,7 @@ namespace OttoNew.OdooSpecificDtos
 		public string Moin { get; set; }
 		public DateTime? ReleaseDate { get; set; }
 
-		public ProductDescriptionDto ProductDescription { get; set; }
+		public OdooProductDescriptionDto ProductDescription { get; set; }
 		public List<ProductMediaDto> MediaAssets { get; set; } = new();
 		public ProductOrderWrapperDto Order { get; set; }
 		public ProductPricingDto Pricing { get; set; }
@@ -39,7 +39,7 @@ namespace OttoNew.OdooSpecificDtos
 
 	}
 
-	public class ProductDescriptionDto
+	public class OdooProductDescriptionDto
 	{
 		public string Category { get; set; }
 		public string BrandId { get; set; }
