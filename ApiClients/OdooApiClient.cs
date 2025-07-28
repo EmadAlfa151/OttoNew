@@ -931,9 +931,9 @@ namespace OttoNew.ApiClients
 			{
 				var account = accountResult.Data;
 				_url = account.Url.EndsWith("/jsonrpc") ? account.Url : account.Url.TrimEnd('/') + "/jsonrpc";
-				_db = account.DbName;
-				_username = account.Email;
-				_password = account.PassAccount;
+				_db = account.DataBaseName;
+				_username = account.UserName;
+				_password = account.Password;
 			}
 		}
 		private async Task<int> Authenticate()

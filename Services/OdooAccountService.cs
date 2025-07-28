@@ -12,42 +12,42 @@ namespace OttoNew.Services
 {
 	public class OdooAccountService
 	{
-		private readonly Middleware_dbContext _context;
+		private readonly  AppDbContext _context;
 
-		public OdooAccountService(Middleware_dbContext context)
+		public OdooAccountService( AppDbContext context)
 		{
 			_context = context;
 		}
 
-		public async Task<Result<OdooAccount>> GetFirstAccount()
+		public async Task<Result<TOdooAccount>> GetFirstAccount()
 		{
-			var account = await _context.OdooAccounts.FirstOrDefaultAsync();
+			var account = await _context.TOdooAccounts.FirstOrDefaultAsync();
 			if (account is null)
 			{
-				return Result<OdooAccount>.Failure("No Odoo Accounts found!");
+				return Result<TOdooAccount>.Failure("No Odoo Accounts found!");
 			}
-			return Result<OdooAccount>.Success(account);
+			return Result<TOdooAccount>.Success(account);
 		}
-		public Task<List<OdooAccount>> LoadAllAccountAsync()
+		public Task<List<TOdooAccount>> LoadAllAccountAsync()
 		{
-			return Task.Run(() => _context.OdooAccounts.ToList());
+			return Task.Run(() => _context.TOdooAccounts.ToList());
 		}
 
-		public async Task<bool> DeleteAsync(OdooAccount account)
+		public async Task<bool> DeleteAsync(TOdooAccount account)
 		{
-			var entry = await _context.OdooAccounts.FindAsync(account.Id);
+			var entry = await _context.TOdooAccounts.FindAsync(account.Id);
 			if (entry != null)
 			{
-				_context.OdooAccounts.Remove(entry);
+				_context.TOdooAccounts.Remove(entry);
 				await _context.SaveChangesAsync();
 				return true;
 			}
 			return false;
 		}
 
-		public async Task<bool> AddAsync(OdooAccount account)
+		public async Task<bool> AddAsync(TOdooAccount account)
 		{
-			_context.OdooAccounts.Add(account);
+			_context.TOdooAccounts.Add(account);
 			await _context.SaveChangesAsync();
 			return true;
 		}

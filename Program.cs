@@ -12,7 +12,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
 // Add services
-builder.Services.AddDbContext<Middleware_dbContext>(options =>
+builder.Services.AddDbContext< AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 

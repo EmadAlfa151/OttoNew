@@ -20,11 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CoreSystem.DAL\CoreSystem.DAL.csproj" />
+    <Folder Include="ApiClients\ApiModels\Requests\" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="ApiClients\ApiModels\Requests\" />
+    <ProjectReference Include="..\CoreSystem.DAL\CoreSystem.DAL.csproj" />
   </ItemGroup>
 
 </Project>

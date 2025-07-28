@@ -20,9 +20,9 @@ namespace OttoNew.ApiClients
 	public class OttoApiClient
 	{
 		private readonly HttpClient httpClient;
-		private readonly Middleware_dbContext dbContext;
+		private readonly  AppDbContext dbContext;
 
-		public OttoApiClient(HttpClient httpClient, Middleware_dbContext dbContext)
+		public OttoApiClient(HttpClient httpClient,  AppDbContext dbContext)
 		{
 			this.httpClient = httpClient;
 			this.dbContext = dbContext;
