@@ -61,7 +61,7 @@ namespace OttoNew.ApiClients
             return JsonSerializer.Deserialize<List<OdooCategoryDto>>(response.GetProperty("result").ToString());
         }
 
-        public async Task<List<OdooProductDto>> GetProductsAsync()
+        public async Task<List<ProductDTO>> GetProductsAsync()
         {
             await SetAccountValues();
             try
@@ -91,7 +91,7 @@ namespace OttoNew.ApiClients
                 var response = await SendJsonRpcAsync(payload);
                 var products = JsonSerializer.Deserialize<List<JsonElement>>(response.GetProperty("result").ToString());
 
-                var result = new List<OdooProductDto>();
+                var result = new List<ProductDTO>();
                 foreach (var p in products)
                 {
                     var id = p.GetProperty("id").GetInt32();
@@ -111,14 +111,13 @@ namespace OttoNew.ApiClients
                         categoryName = catArray[1].GetString();
                     }
 
-                    result.Add(new OdooProductDto
+                    result.Add(new ProductDTO
                     {
-                        Id = id,
+                        OdooId = id,
                         Name = name,
-                        DefaultCode = defaultCode,
+                        Sku = defaultCode,
                         CategoryId = categoryId,
-                        CategoryName = categoryName,
-                        SourceSystem = "Odoo"
+                        CategoryName = categoryName
                     });
                 }
 
@@ -152,30 +151,30 @@ namespace OttoNew.ApiClients
             return response.GetProperty("result").GetInt32();
         }
 
-        public async Task<(bool success, string errorMessage)> CreateProductInOdoo(ProductDto product, int? odooCategoryId)
+        public async Task<(bool success, string errorMessage)> CreateProductInOdoo(ProductDTO product, int? odooCategoryId)
         {
             await SetAccountValues();
             try
             {
-                string categoryName = product.ProductDescription?.Category ?? "Uncategorized";
+                string categoryName = product.CategoryName ?? "Uncategorized";
                 int categoryId = await GetCategoryIdByName(categoryName);
 
                 var values = new Dictionary<string, object>
                 {
                     {
                         "name",
-                        !string.IsNullOrWhiteSpace(product.ProductDescription?.Description)
-                            ? product.ProductDescription.Description
-                            : !string.IsNullOrWhiteSpace(product.ProductReference)
-                                ? product.ProductReference
+                        !string.IsNullOrWhiteSpace(product.Description)
+                            ? product.Description
+                            : !string.IsNullOrWhiteSpace(product.Name)
+                                ? product.Name
                                 : !string.IsNullOrWhiteSpace(product.Sku)
                                     ? product.Sku
                                     : "Unnamed Product"
                     },
                     { "default_code", product.Sku ?? "" },
-                    { "barcode", product.Ean ?? "" },
-                    { "description", product.ProductDescription?.Description ?? "" },
-                    { "list_price", product.Pricing?.StandardPrice?.Amount ?? 0m },
+                    { "barcode", product.GTIN ?? "" },
+                    { "description", product.Description ?? "" },
+                    { "list_price", product.NetPrice },
                     { "type", "product" },
                     { "categ_id", categoryId },
                 };
@@ -226,7 +225,7 @@ namespace OttoNew.ApiClients
                 return (false, ex.Message);
             }
         }
-        public async Task<(int createdCount, List<string> errors)> CreateProductsInOdooAsync(List<ProductDto> products)
+        public async Task<(int createdCount, List<string> errors)> CreateProductsInOdooAsync(List<ProductDTO> products)
         {
             await SetAccountValues();
             int createdCount = 0;
@@ -240,11 +239,11 @@ namespace OttoNew.ApiClients
                     var domain = new List<object[]>();
                     if (!string.IsNullOrEmpty(product.Sku))
                         domain.Add(new object[] { "default_code", "=", product.Sku });
-                    if (!string.IsNullOrEmpty(product.Ean))
+                    if (!string.IsNullOrEmpty(product.GTIN))
                     {
                         if (domain.Any())
                             domain.Insert(0, new[] { "|" }); // OR condition
-                        domain.Add(new object[] { "barcode", "=", product.Ean });
+                        domain.Add(new object[] { "barcode", "=", product.GTIN });
                     }
 
                     var searchPayload = new
@@ -273,30 +272,30 @@ namespace OttoNew.ApiClients
 
                     if (foundProducts.Any())
                     {
-                        Debug.WriteLine($"Product with SKU '{product.Sku}' or EAN '{product.Ean}' already exists. Skipping.");
+                        Debug.WriteLine($"Product with SKU '{product.Sku}' or GTIN '{product.GTIN}' already exists. Skipping.");
                         continue;
                     }
 
                     // Build creation values
-                    string categoryName = product.ProductDescription?.Category ?? "Uncategorized";
+                    string categoryName = product.CategoryName ?? "Uncategorized";
                     int categoryId = await GetCategoryIdByName(categoryName);
 
                     var values = new Dictionary<string, object>
                     {
                         {
                             "name",
-                            !string.IsNullOrWhiteSpace(product.ProductDescription?.Description)
-                                ? product.ProductDescription.Description
-                                : !string.IsNullOrWhiteSpace(product.ProductReference)
-                                    ? product.ProductReference
+                            !string.IsNullOrWhiteSpace(product.Description)
+                                ? product.Description
+                                : !string.IsNullOrWhiteSpace(product.Name)
+                                    ? product.Name
                                     : !string.IsNullOrWhiteSpace(product.Sku)
                                         ? product.Sku
                                         : "Unnamed Product"
                         },
                         { "default_code", product.Sku ?? "" },
-                        { "barcode", product.Ean ?? "" },
-                        { "description", product.ProductDescription?.Description ?? "" },
-                        { "list_price", product.Pricing?.StandardPrice?.Amount ?? 0m },
+                        { "barcode", product.GTIN ?? "" },
+                        { "description", product.Description ?? "" },
+                        { "list_price", product.NetPrice },
                         { "type", "product" },
                         { "categ_id", categoryId }
                     };
@@ -496,202 +495,62 @@ namespace OttoNew.ApiClients
             }
         }
 
-
-        //public async Task<(bool success, string errorMessage)> CreateOrderInOdoo(OdooOrder odooOrder)
-        //{
-        //    try
-        //    {
-        //        var values = new Dictionary<string, object>
-        //{
-        //    { "partner_id", 1 },
-        //    { "name", odooOrder.OrderNumber },
-        //    { "date_order", odooOrder.OrderDate?.ToString("yyyy-MM-dd HH:mm:ss") },
-        //    { "note", $"Order created from OTTO - Order ID: {odooOrder.SalesOrderId}" }
-        //};
-
-        //        var orderLines = new List<object>();
-
-        //        // ✅ Example test item (in case real ones are empty or invalid)
-        //        var testProductId = await GetOdooProductIdBySku("TEST-SKU-123");
-        //        if (testProductId == 0)
-        //        {
-        //            // Create a sample product if not found
-        //            var createPayload = new
-        //            {
-        //                jsonrpc = "2.0",
-        //                method = "call",
-        //                @params = new
-        //                {
-        //                    service = "object",
-        //                    method = "execute_kw",
-        //                    args = new object[]
-        //                    {
-        //                _db,
-        //                await Authenticate(),
-        //                _password,
-        //                "product.product",
-        //                "create",
-        //                new object[]
-        //                {
-        //                    new Dictionary<string, object>
-        //                    {
-        //                        { "name", "Test Product" },
-        //                        { "default_code", "TEST-SKU-123" },
-        //                        { "list_price", 10 },
-        //                        { "type", "product" }
-        //                    }
-        //                }
-        //                    }
-        //                },
-        //                id = _requestId++
-        //            };
-
-        //            var createResponse = await SendJsonRpcAsync(createPayload);
-        //            testProductId = createResponse.GetProperty("result").GetInt32();
-        //        }
-
-        //        orderLines.Add(new object[]
-        //        {
-        //    0, 0,
-        //    new Dictionary<string, object>
-        //    {
-        //        { "product_id", testProductId },
-        //        { "name", "Test Product" },
-        //        { "product_uom_qty", 1 },
-        //        { "price_unit", 10 },
-        //        { "tax_id", new[] { 1 } }
-        //    }
-        //        });
-
-        //        values["order_line"] = orderLines;
-
-        //        var payload = new
-        //        {
-        //            jsonrpc = "2.0",
-        //            method = "call",
-        //            @params = new
-        //            {
-        //                service = "object",
-        //                method = "execute_kw",
-        //                args = new object[]
-        //                {
-        //            _db,
-        //            await Authenticate(),
-        //            _password,
-        //            "sale.order",
-        //            "create",
-        //            new object[] { values }
-        //                }
-        //            },
-        //            id = _requestId++
-        //        };
-
-        //        var response = await SendJsonRpcAsync(payload);
-        //        int newOrderId = response.GetProperty("result").GetInt32();
-        //        Debug.WriteLine($"✅ Odoo order created with ID: {newOrderId}");
-
-        //        return (true, "Order successfully created in Odoo.");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Debug.WriteLine($"❌ Error creating order in Odoo: {ex.Message}");
-        //        return (false, $"Error creating order in Odoo: {ex.Message}");
-        //    }
-        //}
-
-        // Function to get Odoo Product ID by SKU
-        public async Task<(bool success, string errorMessage)> CreateOrderInOdoo(OdooOrder odooOrder)
+        public async Task<(bool success, string errorMessage)> CreateOrderInOdoo(OrderDTO odooOrder, List<OrderPositionDTO> orderPositions)
         {
             await SetAccountValues();
             try
             {
                 var taxes = await GetTaxesAsync();
-                Debug.WriteLine($"🛒 Processing Order: {odooOrder.OrderNumber}, Items: {odooOrder.OrderItems?.Count}");
+                Debug.WriteLine($"🛒 Processing Order: {odooOrder.OrderNumber}, Items: {orderPositions.Count}");
 
                 var values = new Dictionary<string, object>
                 {
-                    { "partner_id", 1 },
+                    { "partner_id", odooOrder.CustomerId },
                     { "name", odooOrder.OrderNumber },
-                    { "date_order", odooOrder.OrderDate?.ToString("yyyy-MM-dd HH:mm:ss") },
-                    { "note", $"Order created from OTTO - Order ID: {odooOrder.SalesOrderId}" }
+                    { "date_order", odooOrder.CreationTime.ToString("yyyy-MM-dd HH:mm:ss") },
+                    { "note", $"Order created from OTTO - Order ID: {odooOrder.Id}" }
                 };
 
                 var orderLines = new List<object>();
 
-                foreach (var item in odooOrder.OrderItems)
+                foreach (var item in orderPositions ?? new List<OrderPositionDTO>())
                 {
                     //var x = await GetTaxesAsync();
-                    Debug.WriteLine($"➡ Checking item: SKU='{item.ProductSku}', Qty={item.Quantity}, Price={item.Price}, Title='{item.ProductTitle}'");
+                    Debug.WriteLine($"➡ Checking item: ProductId={item.ProductId}, Qty={item.Quantity}, Price={item.NetPrice}, Name='{item.ProductName}'");
 
-                    if (string.IsNullOrWhiteSpace(item.ProductSku) || item.Quantity <= 0)
+                    if (item.ProductId <= 0 || item.Quantity <= 0)
                     {
-                        Debug.WriteLine($"⛔ SKIPPED: Empty SKU or invalid quantity. SKU='{item.ProductSku}', Qty={item.Quantity}");
+                        Debug.WriteLine($"⛔ SKIPPED: Invalid ProductId or quantity. ProductId={item.ProductId}, Qty={item.Quantity}");
                         continue;
                     }
 
-                    int productId = await GetOdooProductIdBySku(item.ProductSku);
-                    if (productId == 0)
+                    // Use ProductId directly since OrderPositionDTO already has it
+                    int productId = item.ProductId;
+
+
+
+                    // ProductId should already be valid from OrderPositionDTO
+                    if (productId <= 0)
                     {
-                        productId = await GetOdooProductIdByBarcode(item.Ean);
+                        Debug.WriteLine($"❌ SKIPPED: Invalid ProductId={productId} in OrderPositionDTO");
+                        continue;
                     }
 
-
-
-                    if (productId == 0)
-                    {
-                        // Step 1: Check if exists in template
-                        bool existsInTemplate = await ProductExists(sku: item.ProductSku, barcode: item.Ean);
-                        if (existsInTemplate)
-                        {
-                            Debug.WriteLine($"⚠️ SKIPPED: SKU '{item.ProductSku}' exists in product.template but no product.product linked.");
-                            continue;
-                        }
-
-                        // Step 2: Try create product
-                        var productDto = new ProductDto
-                        {
-                            Sku = item.ProductSku,
-                            Ean = item.Ean,
-                            ProductDescription = new OdooProductDescriptionDto { Description = item.ProductTitle },
-                            Pricing = new ProductPricingDto
-                            {
-                                StandardPrice = new PriceDto { Amount = item.Price > 0 ? item.Price : 1 }
-                            }
-                        };
-
-                        var creationResult = await CreateProductInOdoo(productDto, null);
-                        if (!creationResult.success)
-                        {
-                            Debug.WriteLine($"❌ SKIPPED: Failed to create product. SKU='{item.ProductSku}', Reason: {creationResult.errorMessage}");
-                            continue;
-                        }
-
-                        // Step 3: Try get product again
-                        productId = await GetOdooProductIdBySku(item.ProductSku);
-                        if (productId == 0)
-                        {
-                            Debug.WriteLine($"❌ SKIPPED: Product ID not found even after creation. SKU='{item.ProductSku}'");
-                            continue;
-                        }
-
-                        Debug.WriteLine($"✅ Product created & found: ID={productId}, SKU='{item.ProductSku}'");
-                    }
-
-                    var tax = taxes.FirstOrDefault(t => t.Active && t.Type == "sale" && t.Amount == item.VatRate);
+                    var tax = taxes.FirstOrDefault(t => t.Active && t.Type == "sale" && t.Amount == (decimal)item.Vat);
                     // Step 4: Add line
                     var line = new object[]
                     { 0, 0, new Dictionary<string, object>
                             {
                                     { "product_id", productId },
-                                    { "name", string.IsNullOrWhiteSpace(item.ProductTitle) ? item.ProductSku : item.ProductTitle },
+                                    { "name", string.IsNullOrWhiteSpace(item.ProductName) ? $"Product {item.ProductId}" : item.ProductName },
                                     { "product_uom_qty", item.Quantity },
-                                    { "price_unit", item.Price > 0 ? item.Price : 1 },
+                                    { "price_unit", item.NetPrice > 0 ? item.NetPrice : 1 },
                                     { "tax_id", new[] { tax?.Id } }
                             }
                     };
 
                     orderLines.Add(line);
-                    Debug.WriteLine($"✅ Order line added: SKU='{item.ProductSku}', Qty={item.Quantity}, ProductId={productId}");
+                    Debug.WriteLine($"✅ Order line added: Name='{item.ProductName}', Qty={item.Quantity}, ProductId={productId}");
                 }
 
                 Debug.WriteLine($"📦 Final orderLines count = {orderLines.Count}");
@@ -869,13 +728,13 @@ namespace OttoNew.ApiClients
                         method = "execute_kw",
                         args = new object[]
                         {
-                            _db,
-                            await Authenticate(),
-                            _password,
-                            "product.product",
-                            "search_read",
-                            new object[] { },
-                            new { fields = new[] { "qty_available", "default_code" } }
+                    _db,
+                    await Authenticate(),
+                    _password,
+                    "product.product",
+                    "search_read",
+                    new object[] { },
+                    new { fields = new[] { "qty_available", "default_code" } }
                         }
                     },
                     id = _requestId++
@@ -909,7 +768,7 @@ namespace OttoNew.ApiClients
 
         }
 
-        public async Task<List<OdooOrder>> GetOrdersReadyForShipmentAsync()
+        public async Task<List<OrderDTO>> GetOrdersReadyForShipmentAsync()
         {
             await SetAccountValues();
             try
@@ -937,33 +796,24 @@ namespace OttoNew.ApiClients
                 };
                 var response = await SendJsonRpcAsync(payload);
                 var ordersData = JsonSerializer.Deserialize<List<JsonElement>>(response.GetProperty("result").ToString());
-                var orders = new List<OdooOrder>();
+                var orders = new List<OrderDTO>();
                 foreach (var orderData in ordersData)
                 {
-                    var order = new OdooOrder
+                    var order = new OrderDTO
                     {
                         OrderNumber = orderData.GetProperty("name").GetString(),
-                        SalesOrderId = orderData.GetProperty("id").GetInt32().ToString(),
-                        OrderDate = orderData.TryGetProperty("date_order", out var dateProp) && dateProp.ValueKind != JsonValueKind.Null
-                            ? dateProp.GetDateTime()
-                            : null,
-                        OrderItems = new List<OdooOrderItem>()
+                        Id = orderData.GetProperty("id").GetInt32(),
+                        //CreationTime = orderData.TryGetProperty("date_order", out var dateProp) && dateProp.ValueKind != JsonValueKind.Null
+                        //    ? dateProp.GetDateTime()
+                        //    : default,
+                        // Note: OrderPositions would be handled separately in calling code
                     };
                     if (orderData.TryGetProperty("order_line", out var linesArray) && linesArray.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var line in linesArray.EnumerateArray())
                         {
-                            if (line.TryGetProperty("product_id", out var productIdProp) &&
-                                line.TryGetProperty("product_uom_qty", out var qtyProp) &&
-                                line.TryGetProperty("price_unit", out var priceProp))
-                            {
-                                order.OrderItems.Add(new OdooOrderItem
-                                {
-                                    ProductId = productIdProp.GetInt32(),
-                                    Quantity = qtyProp.GetInt32(),
-                                    Price = priceProp.GetDecimal()
-                                });
-                            }
+                            // Note: Order line handling would be done in calling code
+                            // if needed, as OrderDTO doesn't directly contain OrderPositions
                         }
                     }
                     orders.Add(order);

@@ -48,22 +48,19 @@ using (var scope = app.Services.CreateScope())
     
     try
     {
-        // Call the Authenticate method - you can set a breakpoint here
-        //var result = await ottoApiClient.GetOrdersAsync(DateTime.Now.AddDays(-1), DateTime.Now); // Using accountId = 1 for testing
-        //var mappedOrders = DbModelMapper.MapToOrderDtoList(result.Data);
-        //var odooQuantitiesResult = await odooApiClient.GetProductVariationQuantities();
-        var odooResult = await odooApiClient.GetTaxesAsync();
+        // Test fetching product variations and creating products in Odoo
+        var resultProducts = await ottoApiClient.GetProductVariations(); // Using accountId = 1 for testing
+        var mappedProducts = DbModelMapper.MapToProductDto(resultProducts.Data);
+        var x = await odooApiClient.CreateProductsInOdooAsync(mappedProducts.Take(10).ToList());
 
-        //var result = await ottoApiClient.GetProductVariations();
-        //var mappedProducts = DbModelMapper.MapToProductDto(result.Data);
-        //if (result.IsSuccess)
-        //{
-        //    Console.WriteLine("result test successful!");
-        //}
-        //else
-        //{
-        //    Console.WriteLine($"result test failed: {result.ErrorMessage}");
-        //}
+        //////////////////////////////////////////////
+        ///
+        // Test fetching orders and creating them in Odoo
+        var resultOrders = await ottoApiClient.GetOrdersAsync(DateTime.Now.AddDays(-1), DateTime.Now); // Using accountId = 1 for testing
+        var mappedOrders = DbModelMapper.MapToOrderDtoList(resultOrders.Data);
+        
+
+
     }
     catch (Exception ex)
     {

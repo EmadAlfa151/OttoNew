@@ -110,7 +110,26 @@ namespace OttoNew.Mappers
                 MarketplaceOrderNumber = ottoOrder.SalesOrderId, // This is the Otto DB order ID
                 CreationTime = ottoOrder.OrderDate,
                 Customer = MapCustomerDto(ottoOrder),
+                OrderPositions = MapToOrderPositionsDto(ottoOrder.PositionItems),
             };
+        }
+
+        private static List<OrderPositionDTO> MapToOrderPositionsDto(List<OttoPositionItem> positionItems)
+        {
+            var items = new List<OrderPositionDTO>();
+            if (positionItems == null || positionItems.Count == 0) return items;
+            foreach (var item in positionItems) 
+            {
+                var orderPositionDto = new OrderPositionDTO
+                {
+                    Name = item.Product?.ProductTitle,
+                    NetPrice = (double)item.ItemValueReducedGrossPrice.Amount,
+                    Vat = (double)item.Product?.VatRate,
+                };
+                items.Add(orderPositionDto);
+            }
+
+            return items;
         }
 
         public static CustomerDTO MapCustomerDto(OttoOrderResource ottoOrder)
